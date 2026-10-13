@@ -34,5 +34,6 @@ export const readProgress = () => requestProgress();
 export const markLessonComplete = (lessonId: string) => requestProgress("POST", { type: "lesson_complete", lessonId });
 export const saveQuizScore = (lessonId: string, score: number) => requestProgress("POST", { type: "quiz", lessonId, score });
 export const submitExercise = (lessonId: string, moduleSlug: string, code: string, output: string) => requestProgress("POST", { type: "exercise_complete", lessonId, moduleSlug, code, output });
+export const submitWebExercise = (lessonId: string, moduleSlug: string, html: string, css: string) => requestProgress("POST", { type: "web_exercise_complete", lessonId, moduleSlug, html, css });
 export const completeChallenge = (lessonId: string, moduleSlug: string, code: string, output: string) => requestProgress("POST", { type: "challenge_complete", lessonId, moduleSlug, code, output });
 export const selectProject = (projectId: string) => requestProgress("POST", { type: "project_select", projectId });
