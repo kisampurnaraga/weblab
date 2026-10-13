@@ -13,7 +13,7 @@ export default async function HtmlCssLessonPage({params}:{params:Promise<{module
   const next=currentIndex<htmlCssModules.length-1?htmlCssModules[currentIndex+1]:undefined;
   return <div className="lesson-page">
     <div className="lesson-breadcrumb"><Link href="/belajar/html-css">HTML & CSS</Link><span>/</span><span>Modul {module.order}</span><span>/</span><strong>{lesson.title}</strong></div>
-    <HtmlCssLessonClient lesson={lesson} lessonId={`html-css/${module.slug}/${lesson.slug}`} />
+    <HtmlCssLessonClient lesson={lesson} lessonId={`html-css/${module.slug}/${lesson.slug}`} moduleSlug={module.slug} />
     <div className="lesson-nav">{prev?<Link href={`/belajar/html-css/${prev.slug}/${prev.lessons[0].slug}`}>← {prev.title}</Link>:<span/>}{next?<Link href={`/belajar/html-css/${next.slug}/${next.lessons[0].slug}`}>{next.title} →</Link>:<Link href="/progress">Lihat Progress →</Link>}</div>
   </div>;
 }
