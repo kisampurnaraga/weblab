@@ -2,14 +2,23 @@
 
 import { useMemo, useState } from "react";
 
-export default function HtmlCssPlayground({ initialHtml, initialCss, compact = false }: { initialHtml: string; initialCss: string; compact?: boolean }) {
-  const [html, setHtml] = useState(initialHtml);
-  const [css, setCss] = useState(initialCss);
+type Props = {
+  initialHtml: string;
+  initialCss: string;
+  compact?: boolean;
+  onChange?: (value: { html: string; css: string }) => void;
+};
+
+export default function HtmlCssPlayground({ initialHtml, initialCss, compact = false, onChange }: Props) {
+  const [html, setHtmlState] = useState(initialHtml);
+  const [css, setCssState] = useState(initialCss);
   const [tab, setTab] = useState<"html" | "css">("html");
 
   const srcDoc = useMemo(() => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:Inter,Arial,sans-serif;margin:0;padding:24px;color:#172033;background:white}${css}</style></head><body>${html}</body></html>`, [html, css]);
 
-  const reset = () => { setHtml(initialHtml); setCss(initialCss); };
+  const setHtml = (next:string) => { setHtmlState(next); onChange?.({html:next,css}); };
+  const setCss = (next:string) => { setCssState(next); onChange?.({html,css:next}); };
+  const reset = () => { setHtmlState(initialHtml); setCssState(initialCss); onChange?.({html:initialHtml,css:initialCss}); };
 
   return <div className={`web-playground ${compact ? "web-playground-compact" : ""}`}>
     <div className="web-playground-toolbar">
