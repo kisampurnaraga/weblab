@@ -1,12 +1,18 @@
 # webLab Google Sheets Bridge
 
-1. Buka Google Sheet `webLab Student Database`.
-2. Extensions → Apps Script.
-3. Tempel isi `Code.gs`.
-4. Project Settings → Script Properties → tambah `WEBLAB_SECRET` dengan secret acak yang sama seperti `WEBLAB_SHEETS_SECRET` di Vercel.
-5. Deploy → New deployment → Web app → Execute as: Me → Who has access: Anyone.
-6. Salin URL `/exec` ke `WEBLAB_SHEETS_API_URL` di Vercel.
-7. Tambahkan `WEBLAB_SESSION_SECRET` dengan secret acak berbeda minimal 32 karakter.
-8. Redeploy webLab.
+Database `webLab Student Database` dan secret bridge sudah disiapkan. Tidak perlu membuat Script Properties.
 
-Jangan memasukkan password plaintext ke Google Sheet. Password dari webLab di-hash menggunakan scrypt sebelum dikirim ke bridge.
+1. Buka Google Sheet `webLab Student Database`.
+2. Pilih **Extensions → Apps Script**.
+3. Hapus kode contoh, lalu tempel seluruh isi `google-apps-script/Code.gs` dari repository webLab.
+4. Klik **Deploy → New deployment**.
+5. Pilih type **Web app**.
+6. Set **Execute as: Me**.
+7. Set **Who has access: Anyone**.
+8. Klik **Deploy** dan izinkan akses Google bila diminta.
+9. Salin URL Web App yang berakhiran `/exec`.
+10. URL `/exec` tersebut menjadi nilai `WEBLAB_SHEETS_API_URL` di Vercel.
+
+`WEBLAB_SESSION_SECRET` dan `WEBLAB_SHEETS_SECRET` disimpan hanya sebagai environment variable Vercel; jangan commit secret ke source code.
+
+Password siswa tidak pernah disimpan sebagai plaintext. webLab melakukan hashing menggunakan `scrypt` sebelum data akun dikirim ke Google Sheets.
