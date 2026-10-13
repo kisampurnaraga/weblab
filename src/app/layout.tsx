@@ -3,6 +3,7 @@ import "./globals.css";
 import "./auth.css";
 import "./dashboard.css";
 import "./htmlcss.css";
+import "./deep-lessons.css";
 import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
