@@ -13,7 +13,7 @@ export default async function LessonPage({ params }: { params: Promise<{ module:
   const next = currentIndex < pythonModules.length - 1 ? pythonModules[currentIndex + 1] : undefined;
   return <div className="lesson-page">
     <div className="lesson-breadcrumb"><Link href="/belajar/python">Python</Link><span>/</span><span>Modul {module.order}</span><span>/</span><strong>{lesson.title}</strong></div>
-    <LessonClient lesson={lesson} lessonId={`${module.slug}/${lesson.slug}`} />
+    <LessonClient lesson={lesson} lessonId={`${module.slug}/${lesson.slug}`} moduleSlug={module.slug} />
     <div className="lesson-nav">{prev ? <Link href={`/belajar/python/${prev.slug}/${prev.lessons[0].slug}`}>← {prev.title}</Link> : <span/>}{next ? <Link href={`/belajar/python/${next.slug}/${next.lessons[0].slug}`}>{next.title} →</Link> : <Link href="/progress">Lihat Progress →</Link>}</div>
-  </div>
+  </div>;
 }
