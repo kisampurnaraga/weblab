@@ -28,6 +28,7 @@ function doPost(e) {
       touchLogin,
       getProgress,
       saveProgress,
+      getLeaderboard,
       logActivity,
     };
     if (!map[body.action]) return json({ ok: false, error: 'Unknown action' });
@@ -144,6 +145,56 @@ function saveProgress(b) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function getLeaderboard(b) {
+  const students = rows('Siswa');
+  const progressRows = rows('Progress');
+  const sid = students.headers.indexOf('student_id');
+  const sname = students.headers.indexOf('nama_lengkap');
+  const suser = students.headers.indexOf('username');
+  const skelas = students.headers.indexOf('kelas');
+  const sstatus = students.headers.indexOf('status');
+  const pid = progressRows.headers.indexOf('student_id');
+  const lesson = progressRows.headers.indexOf('lesson_id');
+  const payload = progressRows.headers.indexOf('payload_json');
+  const updated = progressRows.headers.indexOf('updated_at');
+
+  const summaries = {};
+  progressRows.values.forEach(row => {
+    if (row[lesson] !== '__summary__') return;
+    try {
+      const p = JSON.parse(row[payload] || '{}');
+      const quizValues = Object.keys(p.quizScores || {}).map(k => Number(p.quizScores[k])).filter(Number.isFinite);
+      summaries[row[pid]] = {
+        xp: Number(p.xp || 0),
+        completedLessons: (p.completedLessons || []).length,
+        quizAverage: quizValues.length ? Math.round(quizValues.reduce((a, v) => a + v, 0) / quizValues.length) : 0,
+        updatedAt: row[updated] ? new Date(row[updated]).toISOString() : '',
+      };
+    } catch (e) {}
+  });
+
+  const ranking = students.values
+    .filter(row => String(row[sstatus] || 'aktif') === 'aktif')
+    .map(row => {
+      const p = summaries[row[sid]] || { xp: 0, completedLessons: 0, quizAverage: 0, updatedAt: '' };
+      return {
+        studentId: row[sid],
+        nama: row[sname],
+        username: row[suser],
+        kelas: row[skelas],
+        xp: p.xp,
+        completedLessons: p.completedLessons,
+        quizAverage: p.quizAverage,
+        updatedAt: p.updatedAt,
+      };
+    })
+    .sort((a, z) => z.xp - a.xp || z.completedLessons - a.completedLessons || z.quizAverage - a.quizAverage || String(a.updatedAt).localeCompare(String(z.updatedAt)))
+    .map((item, index) => Object.assign({ rank: index + 1 }, item));
+
+  const me = ranking.find(x => x.studentId === b.studentId) || null;
+  return { top: ranking.slice(0, 10), me };
 }
 
 function upsert(sh, headers, idCol, lessonCol, studentId, lessonId, data) {
