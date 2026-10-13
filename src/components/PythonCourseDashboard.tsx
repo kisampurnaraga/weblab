@@ -14,32 +14,45 @@ type ProgressState = {
 };
 
 const empty: ProgressState = { completedLessons: [], quizScores: {}, xp: 0 };
+const lessonKey = (moduleSlug: string, lessonSlug: string) => `${moduleSlug}/${lessonSlug}`;
 
 export default function PythonCourseDashboard({ studentName }: { studentName: string }) {
   const [progress, setProgress] = useState<ProgressState>(empty);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/progress", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : empty))
-      .then((data) => setProgress({ ...empty, ...data }))
-      .catch(() => setProgress(empty))
-      .finally(() => setLoading(false));
+    const load = () => {
+      setLoading(true);
+      fetch("/api/progress", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : empty))
+        .then((data) => setProgress({ ...empty, ...data }))
+        .catch(() => setProgress(empty))
+        .finally(() => setLoading(false));
+    };
+
+    load();
+    window.addEventListener("focus", load);
+    document.addEventListener("visibilitychange", load);
+    return () => {
+      window.removeEventListener("focus", load);
+      document.removeEventListener("visibilitychange", load);
+    };
   }, []);
 
   const lessonIndex = useMemo(() => {
     return pythonModules.flatMap((module) =>
       module.lessons.map((lesson) => ({
-        id: lesson.slug,
+        id: lessonKey(module.slug, lesson.slug),
         title: lesson.title,
         href: `/belajar/python/${module.slug}/${lesson.slug}`,
       })),
     );
   }, []);
 
-  const completed = progress.completedLessons.length;
+  const completedSet = useMemo(() => new Set(progress.completedLessons), [progress.completedLessons]);
+  const completed = lessonIndex.filter((lesson) => completedSet.has(lesson.id)).length;
   const percent = Math.min(100, Math.round((completed / Math.max(totalLessons, 1)) * 100));
-  const current = lessonIndex.find((lesson) => lesson.id === progress.currentLesson) ?? lessonIndex[0];
+  const current = lessonIndex.find((lesson) => lesson.id === progress.currentLesson) ?? lessonIndex.find((lesson) => !completedSet.has(lesson.id)) ?? lessonIndex[0];
   const stages = Array.from(new Set(pythonModules.map((m) => m.stage)));
 
   return (
@@ -56,7 +69,7 @@ export default function PythonCourseDashboard({ studentName }: { studentName: st
           <p>Lanjutkan progres Python kamu. Semua lesson, quiz, dan XP tersimpan ke akun ini.</p>
           <div className="student-dashboard-actions">
             <Link className="btn primary large" href={current?.href || "/belajar/python"}>
-              {progress.currentLesson ? "Lanjutkan belajar" : "Mulai lesson pertama"} →
+              {completed > 0 ? "Lanjutkan belajar" : "Mulai lesson pertama"} →
             </Link>
             <Link className="btn ghost large" href="/progress">Lihat progress lengkap</Link>
           </div>
@@ -139,7 +152,7 @@ export default function PythonCourseDashboard({ studentName }: { studentName: st
           <div className="module-list">
             {pythonModules.filter((m) => m.stage === stage).map((module, index) => {
               const first = module.lessons[0];
-              const moduleCompleted = module.lessons.filter((lesson) => progress.completedLessons.includes(lesson.slug)).length;
+              const moduleCompleted = module.lessons.filter((lesson) => completedSet.has(lessonKey(module.slug, lesson.slug))).length;
               const modulePercent = Math.round((moduleCompleted / Math.max(module.lessons.length, 1)) * 100);
 
               return (
