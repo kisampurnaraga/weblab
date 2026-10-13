@@ -5,6 +5,20 @@ export type StudentRecord = {
   password_hash: string; status: "aktif" | "nonaktif"; created_at?: string; last_login_at?: string;
 };
 
+export type LeaderboardEntry = {
+  rank: number;
+  studentId: string;
+  nama: string;
+  username: string;
+  kelas: string;
+  xp: number;
+  completedLessons: number;
+  quizAverage: number;
+  updatedAt?: string;
+};
+
+export type LeaderboardResult = { top: LeaderboardEntry[]; me: LeaderboardEntry | null };
+
 type BridgeResult<T> = { ok: boolean; data?: T; error?: string };
 
 async function bridge<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
@@ -27,5 +41,6 @@ export const studentRepository = {
   touchLogin: (studentId: string) => bridge<boolean>("touchLogin", { studentId }),
   getProgress: (studentId: string) => bridge<ProgressState>("getProgress", { studentId }),
   saveProgress: (studentId: string, progress: ProgressState) => bridge<ProgressState>("saveProgress", { studentId, progress }),
+  getLeaderboard: (studentId: string) => bridge<LeaderboardResult>("getLeaderboard", { studentId }),
   log: (studentId: string, eventType: string, referenceId = "", metadata: Record<string, unknown> = {}) => bridge<boolean>("logActivity", { studentId, eventType, referenceId, metadata }),
 };
