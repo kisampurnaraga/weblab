@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
+import { readProgress, selectProject } from "@/lib/progress";
 
 type Entry = {
   rank: number;
@@ -17,14 +18,24 @@ type Entry = {
 
 type LeaderboardData = { top: Entry[]; me: Entry | null; error?: string };
 
+type ProjectChoice = {
+  id: string;
+  icon: string;
+  title: string;
+  type: string;
+  description: string;
+  skills: string;
+};
+
 const rewards = [
   { rank: 1, medal: "🥇", title: "Python Champion", reward: "Badge Gold + 300 bonus XP" },
   { rank: 2, medal: "🥈", title: "Code Runner", reward: "Badge Silver + 200 bonus XP" },
   { rank: 3, medal: "🥉", title: "Logic Star", reward: "Badge Bronze + 100 bonus XP" },
 ];
 
-const projectChoices = [
+const projectChoices: ProjectChoice[] = [
   {
+    id: "obby-logic",
     icon: "🧱",
     title: "Obby Logic",
     type: "Roblox-inspired",
@@ -32,6 +43,7 @@ const projectChoices = [
     skills: "if · loop · function",
   },
   {
+    id: "mini-tycoon",
     icon: "🏪",
     title: "Mini Tycoon",
     type: "Simulator",
@@ -39,6 +51,7 @@ const projectChoices = [
     skills: "variable · loop · dictionary",
   },
   {
+    id: "pet-care",
     icon: "🐾",
     title: "Pet Care Simulator",
     type: "Cozy game",
@@ -46,6 +59,7 @@ const projectChoices = [
     skills: "class · state · function",
   },
   {
+    id: "fashion-shop",
     icon: "👗",
     title: "Fashion Shop Challenge",
     type: "Creative game",
@@ -53,6 +67,7 @@ const projectChoices = [
     skills: "list · dictionary · scoring",
   },
   {
+    id: "escape-quiz",
     icon: "🧩",
     title: "Escape Quiz",
     type: "Puzzle",
@@ -60,6 +75,7 @@ const projectChoices = [
     skills: "quiz · condition · debugging",
   },
   {
+    id: "school-life",
     icon: "🏫",
     title: "School Life Simulator",
     type: "Roleplay system",
@@ -71,6 +87,10 @@ const projectChoices = [
 export default function LeaderboardAndProjects() {
   const [data, setData] = useState<LeaderboardData>({ top: [], me: null });
   const [loading, setLoading] = useState(true);
+  const [selectedProject, setSelectedProject] = useState<string>("");
+  const [savedProject, setSavedProject] = useState<string>("");
+  const [savingProject, setSavingProject] = useState(false);
+  const [projectMessage, setProjectMessage] = useState("");
 
   useEffect(() => {
     fetch("/api/leaderboard", { cache: "no-store" })
@@ -78,9 +98,37 @@ export default function LeaderboardAndProjects() {
       .then(setData)
       .catch(() => setData({ top: [], me: null }))
       .finally(() => setLoading(false));
+
+    readProgress()
+      .then(progress => {
+        if (progress.selectedProject) {
+          setSelectedProject(progress.selectedProject);
+          setSavedProject(progress.selectedProject);
+        }
+      })
+      .catch(() => undefined);
   }, []);
 
   const podium = data.top.slice(0, 3);
+  const activeProject = useMemo(
+    () => projectChoices.find(project => project.id === selectedProject) || null,
+    [selectedProject]
+  );
+
+  async function saveProject() {
+    if (!selectedProject) return;
+    setSavingProject(true);
+    setProjectMessage("");
+    try {
+      const progress = await selectProject(selectedProject);
+      setSavedProject(progress.selectedProject || selectedProject);
+      setProjectMessage("Project tersimpan ke akun kamu. Siap mulai!");
+    } catch {
+      setProjectMessage("Pilihan belum berhasil disimpan. Coba lagi.");
+    } finally {
+      setSavingProject(false);
+    }
+  }
 
   return <>
     <motion.section
@@ -118,7 +166,7 @@ export default function LeaderboardAndProjects() {
             <small className="reward-copy">{reward?.reward}</small>
           </motion.div>;
         })}
-        {!loading && podium.length === 0 && <div className="leaderboard-empty">Leaderboard siap. Setelah bridge Apps Script diperbarui, ranking siswa akan tampil di sini.</div>}
+        {!loading && podium.length === 0 && <div className="leaderboard-empty">Leaderboard siap. Setelah siswa mengumpulkan XP, ranking akan tampil di sini.</div>}
       </div>
     </motion.section>
 
@@ -132,30 +180,68 @@ export default function LeaderboardAndProjects() {
         <div>
           <span className="eyebrow">Project Arena</span>
           <h2>Pilih game yang kamu suka</h2>
-          <p>Setiap checkpoint project boleh memilih tema. Semua pilihan menguji konsep Python yang sama dengan gaya berbeda.</p>
+          <p>Klik salah satu kartu. Pilihanmu akan disimpan ke akun dan bisa diganti kapan saja.</p>
         </div>
         <Link href="/playground/python" className="btn ghost">Buka Playground</Link>
       </div>
 
       <div className="project-choice-grid">
-        {projectChoices.map((project, index) => <motion.article
-          className="project-choice-card"
-          key={project.title}
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: index * 0.04 }}
-          whileHover={{ y: -5 }}
-        >
-          <div className="project-choice-top">
-            <span className="project-choice-icon">{project.icon}</span>
-            <span className="badge success">{project.type}</span>
-          </div>
-          <h3>{project.title}</h3>
-          <p>{project.description}</p>
-          <small>{project.skills}</small>
-        </motion.article>)}
+        {projectChoices.map((project, index) => {
+          const selected = selectedProject === project.id;
+          const saved = savedProject === project.id;
+          return <motion.button
+            type="button"
+            className={`project-choice-card project-choice-button ${selected ? "selected" : ""}`}
+            key={project.id}
+            aria-pressed={selected}
+            onClick={() => {
+              setSelectedProject(project.id);
+              setProjectMessage("");
+            }}
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: index * 0.04 }}
+            whileHover={{ y: -5 }}
+            whileTap={{ scale: 0.985 }}
+          >
+            <div className="project-choice-top">
+              <span className="project-choice-icon">{project.icon}</span>
+              <span className="badge success">{saved ? "Dipilih ✓" : project.type}</span>
+            </div>
+            <h3>{project.title}</h3>
+            <p>{project.description}</p>
+            <small>{project.skills}</small>
+            {selected && <span className="project-select-indicator">✓ Pilihan kamu</span>}
+          </motion.button>;
+        })}
       </div>
+
+      <motion.div
+        className={`project-selection-bar ${activeProject ? "active" : ""}`}
+        initial={false}
+        animate={{ opacity: activeProject ? 1 : 0.72, y: activeProject ? 0 : 4 }}
+      >
+        <div>
+          <small>PROJECT PILIHAN</small>
+          <strong>{activeProject ? `${activeProject.icon} ${activeProject.title}` : "Belum ada project dipilih"}</strong>
+          <span>{activeProject ? activeProject.description : "Pilih salah satu kartu di atas untuk melanjutkan."}</span>
+          {projectMessage && <em>{projectMessage}</em>}
+        </div>
+        <div className="project-selection-actions">
+          <button
+            className="btn primary"
+            type="button"
+            disabled={!activeProject || savingProject || savedProject === selectedProject}
+            onClick={saveProject}
+          >
+            {savingProject ? "Menyimpan..." : savedProject === selectedProject && selectedProject ? "Tersimpan ✓" : "Pilih Project Ini"}
+          </button>
+          {savedProject === selectedProject && selectedProject && (
+            <Link href={`/playground/python?project=${selectedProject}`} className="btn ghost">Mulai Project →</Link>
+          )}
+        </div>
+      </motion.div>
 
       <div className="project-note">
         <strong>Catatan:</strong> project ini dibuat dengan Python dan UI webLab. Jika nanti ingin benar-benar publish ke Roblox Studio, kita buat track lanjutan <strong>Roblox Studio + Luau</strong> setelah dasar Python siswa kuat.
