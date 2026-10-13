@@ -4,29 +4,49 @@ import { useEffect, useRef, useState } from "react";
 
 type WorkerMessage =
   | { type: "ready" }
+  | { type: "started" }
   | { type: "result"; output: string }
-  | { type: "error"; error: string };
+  | { type: "error"; error: string; output?: string };
 
 const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.29.5/full/pyodide.js";
 const PYODIDE_INDEX = "https://cdn.jsdelivr.net/pyodide/v0.29.5/full/";
+const EXECUTION_TIMEOUT_MS = 6000;
 
 function makeWorker() {
   const workerSource = `
     let pyodide = null;
+    let loadingPromise = null;
     const PYODIDE_URL = ${JSON.stringify(PYODIDE_URL)};
     const PYODIDE_INDEX = ${JSON.stringify(PYODIDE_INDEX)};
+
     async function ensurePyodide() {
       if (pyodide) return pyodide;
-      importScripts(PYODIDE_URL);
-      pyodide = await self.loadPyodide({ indexURL: PYODIDE_INDEX });
-      postMessage({ type: "ready" });
-      return pyodide;
+      if (!loadingPromise) {
+        loadingPromise = (async () => {
+          importScripts(PYODIDE_URL);
+          pyodide = await self.loadPyodide({ indexURL: PYODIDE_INDEX });
+          postMessage({ type: "ready" });
+          return pyodide;
+        })();
+      }
+      return loadingPromise;
     }
+
     self.onmessage = async (event) => {
+      if (event.data?.type === "init") {
+        try {
+          await ensurePyodide();
+        } catch (error) {
+          postMessage({ type: "error", error: "Gagal memuat Python runtime: " + String(error) });
+        }
+        return;
+      }
+
       const { code, input } = event.data;
       const out = [];
       try {
         const py = await ensurePyodide();
+        postMessage({ type: "started" });
         py.setStdout({ batched: (s) => out.push(s) });
         py.setStderr({ batched: (s) => out.push(s) });
         py.globals.set("__weblab_code", code);
@@ -65,47 +85,79 @@ finally:
 export default function PythonPlayground({ initialCode = 'print("Hello, webLab!")', compact = false }: { initialCode?: string; compact?: boolean }) {
   const [code, setCode] = useState(initialCode);
   const [input, setInput] = useState("");
-  const [output, setOutput] = useState("Python belum dijalankan.");
-  const [status, setStatus] = useState<"idle" | "loading" | "running" | "done" | "error">("idle");
+  const [output, setOutput] = useState("Python sedang disiapkan...");
+  const [status, setStatus] = useState<"idle" | "loading" | "running" | "done" | "error">("loading");
   const workerRef = useRef<Worker | null>(null);
   const timerRef = useRef<number | null>(null);
+  const readyRef = useRef(false);
+
+  const clearTimer = () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const startExecutionTimer = () => {
+    clearTimer();
+    timerRef.current = window.setTimeout(() => {
+      workerRef.current?.terminate();
+      readyRef.current = false;
+      setOutput("Eksekusi dihentikan setelah 6 detik. Periksa kemungkinan infinite loop.");
+      setStatus("error");
+      resetWorker();
+    }, EXECUTION_TIMEOUT_MS);
+  };
 
   const resetWorker = () => {
+    clearTimer();
     workerRef.current?.terminate();
-    workerRef.current = makeWorker();
-    workerRef.current.onmessage = (event: MessageEvent<WorkerMessage & { output?: string }>) => {
+    readyRef.current = false;
+    const worker = makeWorker();
+    workerRef.current = worker;
+    worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
       if (event.data.type === "ready") {
+        readyRef.current = true;
         setStatus((s) => (s === "loading" ? "idle" : s));
+        setOutput((current) => current === "Python sedang disiapkan..." ? "Python siap. Tekan Run untuk menjalankan kode." : current);
+      }
+      if (event.data.type === "started") {
+        setStatus("running");
+        setOutput("Menjalankan kode...");
+        startExecutionTimer();
       }
       if (event.data.type === "result") {
-        if (timerRef.current) window.clearTimeout(timerRef.current);
+        clearTimer();
         setOutput(event.data.output || "Kode selesai tanpa output. Gunakan print() untuk menampilkan hasil.");
         setStatus("done");
       }
       if (event.data.type === "error") {
-        if (timerRef.current) window.clearTimeout(timerRef.current);
+        clearTimer();
         setOutput(`${event.data.output ? event.data.output + "\n\n" : ""}${event.data.error}`);
         setStatus("error");
       }
     };
+    worker.postMessage({ type: "init" });
   };
 
   useEffect(() => {
     resetWorker();
-    return () => workerRef.current?.terminate();
+    return () => {
+      clearTimer();
+      workerRef.current?.terminate();
+    };
   }, []);
 
   const run = () => {
     if (!workerRef.current) resetWorker();
-    setStatus("running");
-    setOutput("Menjalankan kode...");
-    workerRef.current?.postMessage({ code, input });
-    timerRef.current = window.setTimeout(() => {
-      workerRef.current?.terminate();
-      setOutput("Eksekusi dihentikan setelah 6 detik. Periksa kemungkinan infinite loop.");
-      setStatus("error");
-      resetWorker();
-    }, 6000);
+    if (!readyRef.current) {
+      setStatus("loading");
+      setOutput("Menyiapkan Python runtime... Kode akan dijalankan otomatis setelah siap.");
+    } else {
+      setStatus("running");
+      setOutput("Menjalankan kode...");
+    }
+    workerRef.current?.postMessage({ type: "run", code, input });
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -126,15 +178,25 @@ export default function PythonPlayground({ initialCode = 'print("Hello, webLab!"
     }
   };
 
+  const statusLabel = status === "loading"
+    ? "Menyiapkan Python..."
+    : status === "running"
+      ? "Menjalankan..."
+      : status === "error"
+        ? "Error"
+        : status === "done"
+          ? "Selesai"
+          : "Python siap";
+
   return (
     <section className={`playground ${compact ? "playground-compact" : ""}`}>
       <div className="playground-toolbar">
         <div>
           <span className={`status-dot ${status}`} />
-          <strong>{status === "running" ? "Menjalankan..." : status === "error" ? "Error" : "Python Playground"}</strong>
+          <strong>{statusLabel}</strong>
         </div>
         <div className="toolbar-actions">
-          <button className="btn ghost" onClick={() => { setCode(initialCode); setOutput("Kode direset."); }}>Reset</button>
+          <button className="btn ghost" onClick={() => { setCode(initialCode); setOutput(readyRef.current ? "Kode direset. Python siap." : "Python sedang disiapkan..."); }}>Reset</button>
           <button className="btn primary" onClick={run} disabled={status === "running"}>Run ▶</button>
         </div>
       </div>
@@ -146,7 +208,7 @@ export default function PythonPlayground({ initialCode = 'print("Hello, webLab!"
       </details>
       <div className="output-head"><strong>Output Program</strong><button className="link-button" onClick={() => setOutput("")}>Bersihkan</button></div>
       <pre className={`output ${status === "error" ? "output-error" : ""}`}>{output}</pre>
-      <p className="keyboard-hint">Tip: Ctrl/Cmd + Enter untuk menjalankan. Eksekusi berhenti otomatis setelah 6 detik.</p>
+      <p className="keyboard-hint">Tip: Ctrl/Cmd + Enter untuk menjalankan. Batas 6 detik dihitung setelah Python runtime siap.</p>
     </section>
   );
 }
