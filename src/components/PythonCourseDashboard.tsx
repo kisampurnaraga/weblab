@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { pythonModules, totalLessons } from "@/data/python";
+import LeaderboardAndProjects from "@/components/LeaderboardAndProjects";
 
 type ProgressState = {
   completedLessons: string[];
@@ -96,6 +97,8 @@ export default function PythonCourseDashboard({ studentName }: { studentName: st
           </motion.div>
         ))}
       </section>
+
+      <LeaderboardAndProjects />
 
       <motion.section
         className="course-hero course-hero-dashboard"
