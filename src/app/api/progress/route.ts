@@ -24,8 +24,9 @@ export async function GET() {
   try {
     const p = await studentRepository.getProgress(session.studentId);
     return NextResponse.json({ ...empty, ...p, earnedRewards: p.earnedRewards || [], completedExercises: p.completedExercises || [], completedChallenges: p.completedChallenges || [] });
-  } catch {
-    return NextResponse.json(empty);
+  } catch (error) {
+    console.error("Progress GET failed:", error instanceof Error ? error.message : "unknown");
+    return NextResponse.json({ error: "Gagal membaca progress dari Google Sheets. Coba lagi; data tidak direset." }, { status: 503 });
   }
 }
 
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const raw = await studentRepository.getProgress(session.studentId).catch(() => empty);
+    const raw = await studentRepository.getProgress(session.studentId);
     const current: ProgressState = { ...empty, ...raw, earnedRewards: raw.earnedRewards || [], completedExercises: raw.completedExercises || [], completedChallenges: raw.completedChallenges || [] };
     let next: ProgressState = current;
 
@@ -74,7 +75,20 @@ export async function POST(request: Request) {
     }
 
 
+    // XII IPS: finish and grant +10 XP automatically when both task and quiz pass.
+    if ((body.type === "vibe_task_complete" || body.type === "vibe_quiz") && typeof body.lessonId === "string") {
+      const taskPassed = (next.completedExercises || []).includes(body.lessonId);
+      const quizPassed = (next.quizScores[body.lessonId] || 0) >= 75;
+      if (taskPassed && quizPassed && !next.completedLessons.includes(body.lessonId)) {
+        next = { ...next, completedLessons: [...next.completedLessons, body.lessonId], currentLesson: body.lessonId };
+        next = addReward(next, "lesson:" + body.lessonId, 10);
+      }
+    }
+
     if (body.type === "lesson_complete" && typeof body.lessonId === "string") {
+      if (body.lessonId.startsWith("koding-kecerdasan-xii-ips/")) {
+        return NextResponse.json({error:"Pertemuan XII IPS otomatis selesai setelah tugas dikirim dan quiz lulus."},{status:400});
+      }
       if (!current.completedLessons.includes(body.lessonId)) {
         next = { ...current, completedLessons: [...current.completedLessons, body.lessonId], currentLesson: body.lessonId };
         next = addReward(next, `lesson:${body.lessonId}`, 10);
