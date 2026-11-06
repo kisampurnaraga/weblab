@@ -2,7 +2,7 @@
 import {useEffect,useState} from "react";
 import Link from "next/link";
 import {motion} from "motion/react";
-import {markLessonComplete,readProgress} from "@/lib/progress";
+import {readProgress} from "@/lib/progress";
 import {vibeLessons,vibeLessonId} from "@/data/vibeMarketing";
 import type {VibeLesson} from "@/data/vibeMarketing";
 import type {ProgressState} from "@/lib/progress";
@@ -20,6 +20,8 @@ export default function VibeMarketingLesson({lesson}:{lesson:VibeLesson}){
  const [submitted,setSubmitted]=useState(false);
  const [lessonDone,setLessonDone]=useState(false);
  const [score,setScore]=useState<number|null>(null);
+ const [xp,setXp]=useState(0);
+ const [xpGain,setXpGain]=useState(0);
  const [chosen,setChosen]=useState<number|null>(null);
  const [loading,setLoading]=useState(true);
  const [busy,setBusy]=useState(false);
@@ -27,6 +29,7 @@ export default function VibeMarketingLesson({lesson}:{lesson:VibeLesson}){
  const [example,setExample]=useState(false);
  useEffect(()=>{
    readProgress().then(p=>{
+     setXp(p.xp||0);
      setLessonDone(p.completedLessons.includes(id));
      setSubmitted(Boolean(p.completedExercises?.includes(id)));
      if(p.quizScores[id]!==undefined)setScore(p.quizScores[id]);
@@ -40,8 +43,11 @@ export default function VibeMarketingLesson({lesson}:{lesson:VibeLesson}){
    const response=await fetch("/api/progress",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({type:"vibe_task_complete",lessonId:id,prompt,artifact,checks:checked})});
    const payload=await response.json().catch(()=>({}));
    if(!response.ok)throw new Error(payload.error||"Pengiriman gagal");
-   const p=payload as ProgressState;setSubmitted(Boolean(p.completedExercises?.includes(id)));
-   setMessage("✓ Tugas tersimpan di akun. +20 XP diberikan sekali; guru tetap memeriksa kualitas hasil.");
+   const p=payload as ProgressState;
+   const gained=Math.max(0,(p.xp||0)-xp);setXpGain(gained);setXp(p.xp||0);
+   setSubmitted(Boolean(p.completedExercises?.includes(id)));
+   setLessonDone(p.completedLessons.includes(id));
+   setMessage(gained ? "✓ Tugas tersimpan. +"+gained+" XP otomatis masuk ke akun!" : "✓ Tugas diperbarui. XP sebelumnya tetap tersimpan; tidak dihitung ulang.");
   }catch(e){setMessage(e instanceof Error?e.message:"Terjadi kesalahan jaringan.");}finally{setBusy(false);}
  }
  async function sendQuiz(answer:number){
@@ -50,21 +56,18 @@ export default function VibeMarketingLesson({lesson}:{lesson:VibeLesson}){
    const res=await fetch("/api/progress",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({type:"vibe_quiz",lessonId:id,answer})});
    const p=await res.json();
    if(!res.ok)throw new Error(p.error||"Quiz gagal disimpan");
-   setScore(p.quizScores[id]);setMessage("");
+   const gained=Math.max(0,(p.xp||0)-xp);setXpGain(gained);setXp(p.xp||0);
+   setScore(p.quizScores[id]);setLessonDone(p.completedLessons.includes(id));
+   setMessage(gained ? "✓ Quiz tersimpan. +"+gained+" XP otomatis masuk!" : "Quiz tersimpan; reward sebelumnya tidak digandakan.");
   }catch(e){setMessage(e instanceof Error?e.message:"Gagal menyimpan quiz.");}finally{setBusy(false);}
- }
- async function finish(){
-  setBusy(true);
-  try{const p=await markLessonComplete(id);setLessonDone(p.completedLessons.includes(id));}
-  catch(e){setMessage(e instanceof Error?e.message:"Gagal menyimpan lesson.");}
-  finally{setBusy(false);}
  }
  const showEditor=[7,8,9,10,16].includes(index+1);
  return <div className="container page-space vibe-lesson-page">
   <div className="vibe-breadcrumb"><Link href="/belajar/koding-kecerdasan-xii-ips">← XII IPS</Link><span> / Pertemuan {index+1} dari 16 / {lesson.phase}</span></div>
   <motion.header initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} className="vibe-lesson-header">
     <span className="eyebrow">Koding Kecerdasan · {lesson.duration}</span><h1>{lesson.title}</h1><p>{lesson.outcome}</p>
-    <div className="vibe-meter"><i style={{width:((index+1)/vibeLessons.length*100)+"%"}}/></div>
+    <div className="course-meta"><span>⚡ {loading?"…":xp} XP akun</span><span>{submitted?"✓ Tugas dikirim":"○ Tugas belum dikirim"}</span><span>{(score||0)>=75?"✓ Quiz lulus":"○ Quiz belum lulus"}</span><span>{lessonDone?"✓ Pertemuan tuntas":"Sedang belajar"}</span></div>
+    <div className="vibe-meter" role="progressbar" aria-label="Progress pertemuan" aria-valuenow={(Number(submitted)+Number((score||0)>=75))*50} aria-valuemin={0} aria-valuemax={100}><i style={{width:((Number(submitted)+Number((score||0)>=75))*50)+"%"}}/></div>
   </motion.header>
   <div className="vibe-lesson-layout">
    <article className="vibe-lesson-main">
@@ -98,7 +101,7 @@ export default function VibeMarketingLesson({lesson}:{lesson:VibeLesson}){
       {score!==null&&<p className="muted">Nilai terbaik tersimpan: {score}/100.</p>}
     </section>
     {message&&<p role="status" className={`task-message ${message.startsWith("✓")?"ok":"bad"}`}>{message}</p>}
-    <button className="btn complete" disabled={loading||busy} onClick={finish}>{lessonDone?"✓ Lesson sudah selesai":busy?"Menyimpan...":"Tandai lesson selesai +10 XP"}</button>
+    <div className="vibe-panel" role="status" aria-live="polite"><strong>⚡ Total XP: {loading?"…":xp}</strong> {xpGain>0&&<span className="vibe-success">+{xpGain} XP baru</span>}<p>{lessonDone?"✓ Pertemuan selesai otomatis! Reward +10 XP lesson dihitung sekali.":"Selesaikan tugas dan lulus quiz untuk menuntaskan pertemuan secara otomatis. Tidak perlu klik tombol selesai."}</p></div>
     <div className="vibe-lesson-navigation">{prev?<Link className="btn ghost" href={`/belajar/koding-kecerdasan-xii-ips/${prev.slug}`}>← Sebelumnya</Link>:<span/>}{next?<Link className="btn primary" href={`/belajar/koding-kecerdasan-xii-ips/${next.slug}`}>Berikutnya →</Link>:<Link className="btn primary" href="/belajar/koding-kecerdasan-xii-ips">Lihat dashboard →</Link>}</div>
    </article>
    <aside className="vibe-lesson-sidebar"><div className="vibe-panel"><span className="eyebrow">Ringkasan pertemuan</span><h3>Target belajar</h3><p>{lesson.outcome}</p><h3>Checklist prompt</h3><ul>{lesson.promptChecklist.map(x=><li key={x}>{x}</li>)}</ul><a className="btn primary" href="#tugas">Ke workshop ↓</a><small className="vibe-sidebar-note">Reward lesson +10 XP, tugas +20 XP, quiz lulus +50 XP. Hanya sekali per aktivitas.</small></div></aside>
