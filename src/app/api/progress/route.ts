@@ -4,6 +4,7 @@ import { studentRepository } from "@/lib/server/sheets";
 import type { ProgressState } from "@/lib/progress";
 import { validatePythonExercise } from "@/data/pythonPedagogy";
 import { validateWebExercise } from "@/data/htmlCssValidation";
+import { getVibeLesson, vibeLessonId } from "@/data/vibeMarketing";
 
 const empty: ProgressState = { completedLessons: [], quizScores: {}, xp: 0, earnedRewards: [], completedExercises: [], completedChallenges: [] };
 export const runtime = "nodejs";
@@ -37,6 +38,41 @@ export async function POST(request: Request) {
     const raw = await studentRepository.getProgress(session.studentId).catch(() => empty);
     const current: ProgressState = { ...empty, ...raw, earnedRewards: raw.earnedRewards || [], completedExercises: raw.completedExercises || [], completedChallenges: raw.completedChallenges || [] };
     let next: ProgressState = current;
+
+    // XII IPS: task content is recorded; only completeness is automatically checked.
+    if (body.type === "vibe_task_complete") {
+      const slug = typeof body.lessonId === "string" ? body.lessonId.replace("koding-kecerdasan-xii-ips/", "") : "";
+      const lesson = getVibeLesson(slug);
+      if (!lesson || body.lessonId !== vibeLessonId(slug)) return NextResponse.json({ error: "Materi XII IPS tidak ditemukan." }, { status: 400 });
+      const prompt = typeof body.prompt === "string" ? body.prompt.trim().slice(0, 6000) : "";
+      const artifact = typeof body.artifact === "string" ? body.artifact.trim().slice(0, 12000) : "";
+      const checks = Array.isArray(body.checks) ? body.checks : [];
+      const requiredChecks = ["Prompt menyebut tujuan dan target pengguna", "Artefak saya revisi dan tidak berisi data sensitif", "Saya bisa menjelaskan hasil tanpa membaca jawaban AI"];
+      if (prompt.length < 100 || artifact.length < lesson.minArtifactLength || artifact === lesson.artifactStarter.trim() || requiredChecks.some(x => !checks.includes(x))) {
+        return NextResponse.json({ error: "Lengkapi prompt (minimal 100 karakter), tulis hasil yang berbeda dari contoh (minimal 110 karakter), lalu centang ketiga pemeriksaan." }, { status: 400 });
+      }
+      if (lesson.requiredWords.some(word => !artifact.toLowerCase().includes(word.toLowerCase()))) {
+        return NextResponse.json({ error: "Hasil belum memuat unsur penting: " + lesson.requiredWords.join(", ") }, { status: 400 });
+      }
+      const previous = current.completedExercises || [];
+      next = { ...current, completedExercises: previous.includes(body.lessonId) ? previous : [...previous, body.lessonId], currentLesson: body.lessonId,
+        vibeSubmissions: { ...(current.vibeSubmissions || {}), [body.lessonId]: { prompt, artifact, submittedAt: new Date().toISOString() } } };
+      next = addReward(next, "exercise:" + body.lessonId, 20);
+    }
+
+    // XII IPS quiz is graded on the server: the browser cannot submit its own score.
+    if (body.type === "vibe_quiz") {
+      const slug = typeof body.lessonId === "string" ? body.lessonId.replace("koding-kecerdasan-xii-ips/", "") : "";
+      const lesson = getVibeLesson(slug);
+      if (!lesson || body.lessonId !== vibeLessonId(slug) || !Number.isInteger(body.answer) || body.answer < 0 || body.answer >= lesson.quiz.options.length) {
+        return NextResponse.json({ error: "Jawaban quiz tidak valid." }, { status: 400 });
+      }
+      const score = body.answer === lesson.quiz.answer ? 100 : 0;
+      const previous = current.quizScores[body.lessonId] || 0;
+      next = { ...current, quizScores: { ...current.quizScores, [body.lessonId]: Math.max(previous, score) }, currentLesson: body.lessonId };
+      if (score === 100) next = addReward(next, "quiz:" + body.lessonId, 50);
+    }
+
 
     if (body.type === "lesson_complete" && typeof body.lessonId === "string") {
       if (!current.completedLessons.includes(body.lessonId)) {
