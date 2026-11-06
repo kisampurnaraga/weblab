@@ -4,7 +4,7 @@ import { studentRepository } from "@/lib/server/sheets";
 import type { ProgressState } from "@/lib/progress";
 import { validatePythonExercise } from "@/data/pythonPedagogy";
 import { validateWebExercise } from "@/data/htmlCssValidation";
-import { getVibeLesson, vibeLessonId } from "@/data/vibeMarketing";
+import { getVibeLesson, vibeLessonId, vibeLessons } from "@/data/vibeMarketing";
 
 const empty: ProgressState = { completedLessons: [], quizScores: {}, xp: 0, earnedRewards: [], completedExercises: [], completedChallenges: [] };
 export const runtime = "nodejs";
@@ -39,6 +39,25 @@ export async function POST(request: Request) {
     const raw = await studentRepository.getProgress(session.studentId);
     const current: ProgressState = { ...empty, ...raw, earnedRewards: raw.earnedRewards || [], completedExercises: raw.completedExercises || [], completedChallenges: raw.completedChallenges || [] };
     let next: ProgressState = current;
+
+    if (body.type === "vibe_sync") {
+      // Reconcile historical lesson records with existing validated task/quiz
+      // evidence. Reward IDs keep this operation idempotent.
+      for (const lesson of vibeLessons) {
+        const lessonId = vibeLessonId(lesson.slug);
+        const taskDone = (next.completedExercises || []).includes(lessonId);
+        const quizPassed = (next.quizScores[lessonId] || 0) >= 75;
+        if (taskDone) next = addReward(next, "exercise:" + lessonId, 20);
+        if (quizPassed) next = addReward(next, "quiz:" + lessonId, 50);
+        if (taskDone && quizPassed) {
+          if (!next.completedLessons.includes(lessonId)) {
+            next = { ...next, completedLessons: [...next.completedLessons, lessonId] };
+          }
+          next = addReward(next, "lesson:" + lessonId, 10);
+        }
+      }
+      if (JSON.stringify(next) === JSON.stringify(current)) return NextResponse.json(current);
+    }
 
     // XII IPS: task content is recorded; only completeness is automatically checked.
     if (body.type === "vibe_task_complete") {
