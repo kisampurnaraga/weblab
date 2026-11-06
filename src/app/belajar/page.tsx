@@ -5,6 +5,7 @@ export const metadata = { title: "Belajar" };
 export default function LearnPage() {
   const courses = [
     { title: "Python Programming", desc: "Dari program pertama hingga REST API dan SQLite.", href: "/belajar/python", symbol: "Py", badge: "Aktif" },
+    { title: "Koding Kecerdasan · XII IPS", desc: "Vibe coding dan AI untuk riset pasar, UMKM, landing page, konten, dan analitik.", href: "/belajar/koding-kecerdasan-xii-ips", symbol: "AI\nIPS", badge: "Khusus XII IPS" },
     { title: "HTML & CSS", desc: "Dari struktur halaman sampai portfolio responsive dengan live preview.", href: "/belajar/html-css", symbol: "<>\nCSS", badge: "Baru" },
   ];
   return <div className="container page-space">
