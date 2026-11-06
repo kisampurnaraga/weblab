@@ -11,7 +11,7 @@ export default function VibeMarketingDashboard({studentName}:{studentName:string
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const refresh=useCallback(async()=>{
-   try{const p=await readProgress();setProgress(p);setError("");}
+   try{const response=await fetch("/api/progress",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({type:"vibe_sync"}),cache:"no-store"});if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||"Rekonsiliasi progress gagal.");}const p=await readProgress();setProgress(p);setError("");}
    catch(e){setError(e instanceof Error?e.message:"Progress belum dapat disinkronkan.");}
    finally{setLoading(false);}
  },[]);
