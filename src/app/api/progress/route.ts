@@ -44,8 +44,8 @@ export async function POST(request: Request) {
       const slug = typeof body.lessonId === "string" ? body.lessonId.replace("koding-kecerdasan-xii-ips/", "") : "";
       const lesson = getVibeLesson(slug);
       if (!lesson || body.lessonId !== vibeLessonId(slug)) return NextResponse.json({ error: "Materi XII IPS tidak ditemukan." }, { status: 400 });
-      const prompt = typeof body.prompt === "string" ? body.prompt.trim().slice(0, 6000) : "";
-      const artifact = typeof body.artifact === "string" ? body.artifact.trim().slice(0, 12000) : "";
+      const prompt = typeof body.prompt === "string" ? body.prompt.trim().slice(0, 800) : "";
+      const artifact = typeof body.artifact === "string" ? body.artifact.trim().slice(0, 1500) : "";
       const checks = Array.isArray(body.checks) ? body.checks : [];
       const requiredChecks = ["Prompt menyebut tujuan dan target pengguna", "Artefak saya revisi dan tidak berisi data sensitif", "Saya bisa menjelaskan hasil tanpa membaca jawaban AI"];
       if (prompt.length < 100 || artifact.length < lesson.minArtifactLength || artifact === lesson.artifactStarter.trim() || requiredChecks.some(x => !checks.includes(x))) {
