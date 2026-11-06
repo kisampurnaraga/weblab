@@ -8,6 +8,7 @@ export type ProgressState = {
   earnedRewards?: string[];
   completedExercises?: string[];
   completedChallenges?: string[];
+  vibeSubmissions?: Record<string, { prompt: string; artifact: string; submittedAt: string }>;
 };
 
 export const EMPTY_PROGRESS: ProgressState = { completedLessons: [], quizScores: {}, xp: 0, earnedRewards: [], completedExercises: [], completedChallenges: [] };
